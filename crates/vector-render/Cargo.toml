@@ -1,0 +1,13 @@
+[package]
+name = "vector-render"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+vector-model.workspace = true
+repose-core.workspace = true
+repose-canvas.workspace = true
+kurbo.workspace = true
+lyon_tessellation.workspace = true
+lyon_path.workspace = true

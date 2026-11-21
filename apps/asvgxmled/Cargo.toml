@@ -1,0 +1,33 @@
+[package]
+name = "asvgxmled"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Android VectorDrawable XML editor and preview"
+
+[[bin]]
+name = "asvgxmled"
+path = "src/main.rs"
+
+[dependencies]
+repose-core.workspace = true
+repose-ui.workspace = true
+repose-material.workspace = true
+repose-canvas.workspace = true
+repose-platform.workspace = true
+repose-render-wgpu.workspace = true
+
+vector-model.workspace = true
+vector-render.workspace = true
+
+rlobkit-dialogs = "0.7"
+clipawl = "0.4"
+image.workspace = true
+anyhow.workspace = true
+log.workspace = true
+env_logger.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
