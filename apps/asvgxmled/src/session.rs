@@ -122,7 +122,7 @@ impl Default for Settings {
             tint: false,
             tint_color: Rgba { r: 103, g: 80, b: 164, a: 255 },
             monochrome: false,
-            monochrome_color: Rgba::BLACK,
+            monochrome_color: Rgba::WHITE,
             mirrored: false,
             zoom: 1.0,
             pan_x: 0.0,

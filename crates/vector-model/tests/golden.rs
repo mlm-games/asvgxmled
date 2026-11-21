@@ -69,6 +69,20 @@ fn parses_and_applies_animated_vector() {
 }
 
 #[test]
+fn tint_preserves_source_alpha() {
+    let xml = r##"<vector xmlns:android="http://schemas.android.com/apk/res/android"
+        android:width="24dp" android:height="24dp"
+        android:viewportWidth="24" android:viewportHeight="24">
+        <path android:pathData="M0,0H24V24H0Z" android:fillColor="#80FF0000" />
+    </vector>"##;
+    let mut doc = parse(xml).doc.expect("parses");
+    doc.tint = Some(vector_model::ColorSpec::Literal(Rgba { r: 0, g: 0, b: 255, a: 255 }));
+    let svg = format::to_svg(&doc, Rgba::BLACK);
+    assert!(svg.contains("fill-opacity=\"0.501"), "{svg}");
+    assert!(svg.contains("fill=\"#0000FF\""), "{svg}");
+}
+
+#[test]
 fn optimize_keeps_rendering_semantics() {
     let (optimized, _, _) = format::optimize(ICON);
     let before = parse(ICON).doc.expect("before parses");

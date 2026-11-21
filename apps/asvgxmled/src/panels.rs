@@ -471,6 +471,26 @@ fn preview_canvas(session: &Rc<Session>, drag: Rc<Cell<Option<(f32, f32)>>>) -> 
                 }
             }
         }
+        if settings.monochrome {
+            let iw = doc.width as f32 * scale;
+            let ih = doc.height as f32 * scale;
+            let guide = Color::from_hex("#448AFF").with_alpha_f32(0.6);
+            let inset = iw.min(ih) * (18.0 / 108.0);
+            let sx = tx + inset;
+            let sy = ty + inset;
+            let sw = iw - inset * 2.0;
+            let sh = ih - inset * 2.0;
+            scope.draw_rect(Rect { x: sx, y: sy, w: sw, h: 1.0 }, guide, Px(0.0));
+            scope.draw_rect(Rect { x: sx, y: sy + sh - 1.0, w: sw, h: 1.0 }, guide, Px(0.0));
+            scope.draw_rect(Rect { x: sx, y: sy, w: 1.0, h: sh }, guide, Px(0.0));
+            scope.draw_rect(Rect { x: sx + sw - 1.0, y: sy, w: 1.0, h: sh }, guide, Px(0.0));
+            scope.draw_circle_stroke(
+                Vec2 { x: tx + iw * 0.5, y: ty + ih * 0.5 },
+                iw.min(ih) * 0.5,
+                guide,
+                Px(1.0),
+            );
+        }
         let transformed = vector_render::with_outer(&ops, [scale, 0.0, 0.0, scale, tx, ty]);
         vector_render::paint(&transformed, scope);
     })
