@@ -70,8 +70,9 @@ pub fn svg_text(doc: &VectorDoc, theme: Rgba) -> String {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn save_text(queue: FileQueue, name: String, extension: &str, text: String) {
+    let extension = extension.to_owned();
     thread::spawn(move || {
-        let Some(path) = rlobkit_dialogs::blocking_save_file("Save file", &name, extension) else { return };
+        let Some(path) = rlobkit_dialogs::blocking_save_file("Save file", &name, &extension) else { return };
         match std::fs::write(&path, text) {
             Ok(()) => post(&queue, FileEvent::Saved(format!("Saved {}", path.display()))),
             Err(e) => post(&queue, FileEvent::Failed(format!("Save failed: {e}"))),
