@@ -1,5 +1,5 @@
 use std::rc::Rc;
-use std::time::Instant;
+use web_time::Instant;
 
 use repose_core::{Dp, Modifier, Sp, Theme, View, WidthClass, remember_auto, request_frame, theme, window_size_class};
 use repose_material::{Icon, Symbol};

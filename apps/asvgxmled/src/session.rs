@@ -1,6 +1,6 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
-use std::time::Instant;
+use web_time::Instant;
 use std::sync::{Arc, Mutex};
 
 use repose_core::signal;

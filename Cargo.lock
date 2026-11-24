@@ -326,6 +326,7 @@ dependencies = [
  "vector-render",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "web-time",
 ]
 
 [[package]]
