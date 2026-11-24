@@ -141,10 +141,7 @@ pub fn queue_save_png(queue: FileQueue, name: String, bytes: Vec<u8>) {
     });
 }
 
-pub fn png_bytes(doc: &VectorDoc, opts: &RenderOptions, ops: &[RenderOp], scale: f32, background: Rgba) -> Result<Vec<u8>> {
-    let _ = opts;
-    let w = (doc.width as f32 * scale).round().max(1.0) as u32;
-    let h = (doc.height as f32 * scale).round().max(1.0) as u32;
+fn build_scene(ops: &[RenderOp], scale: f32, background: Rgba) -> Scene {
     let mut scene = Scene::default();
     scene.clear_color = Color::from_rgba(background.r, background.g, background.b, background.a);
     for op in ops {
@@ -163,10 +160,63 @@ pub fn png_bytes(doc: &VectorDoc, opts: &RenderOptions, ops: &[RenderOp], scale:
             RenderOp::PopClip => scene.nodes.push(SceneNode::PopVectorClip),
         }
     }
-    let mut renderer = OffscreenRenderer::new_blocking(w, h, 1).context("no GPU adapter for PNG export")?;
-    let rgba = renderer.render_rgba(&scene, None).context("offscreen render failed")?;
+    scene
+}
+
+fn encode_png(rgba: Vec<u8>, w: u32, h: u32) -> Result<Vec<u8>> {
     let image = image::RgbaImage::from_raw(w, h, rgba).context("invalid RGBA buffer")?;
     let mut bytes = Cursor::new(Vec::new());
     image.write_to(&mut bytes, ImageFormat::Png).context("PNG encode failed")?;
     Ok(bytes.into_inner())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn queue_png_render(
+    queue: FileQueue,
+    name: String,
+    doc: &VectorDoc,
+    ops: &[RenderOp],
+    scale: f32,
+    background: Rgba,
+) {
+    let w = (doc.width as f32 * scale).round().max(1.0) as u32;
+    let h = (doc.height as f32 * scale).round().max(1.0) as u32;
+    let scene = build_scene(ops, scale, background);
+    thread::spawn(move || {
+        let result = (|| -> Result<Vec<u8>> {
+            let mut renderer = OffscreenRenderer::new_blocking(w, h, 1).context("no GPU adapter for PNG export")?;
+            let rgba = renderer.render_rgba(&scene, None).context("offscreen render failed")?;
+            encode_png(rgba, w, h)
+        })();
+        match result {
+            Ok(bytes) => queue_save_png(queue, name, bytes),
+            Err(e) => post(&queue, FileEvent::Failed(format!("PNG failed: {e}"))),
+        }
+    });
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn queue_png_render(
+    queue: FileQueue,
+    name: String,
+    doc: &VectorDoc,
+    ops: &[RenderOp],
+    scale: f32,
+    background: Rgba,
+) {
+    let w = (doc.width as f32 * scale).round().max(1.0) as u32;
+    let h = (doc.height as f32 * scale).round().max(1.0) as u32;
+    let scene = build_scene(ops, scale, background);
+    wasm_bindgen_futures::spawn_local(async move {
+        let result = async {
+            let mut renderer = OffscreenRenderer::new(w, h, 1).await.context("no WebGPU adapter for PNG export")?;
+            let rgba = renderer.render_rgba_async(&scene, None).await.context("offscreen render failed")?;
+            encode_png(rgba, w, h)
+        }
+        .await;
+        match result {
+            Ok(bytes) => queue_save_png(queue, name, bytes),
+            Err(e) => post(&queue, FileEvent::Failed(format!("PNG failed: {e}"))),
+        }
+    });
 }

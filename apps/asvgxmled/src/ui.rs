@@ -228,10 +228,7 @@ fn top_bar(session: &Rc<Session>) -> View {
                 let opts = s.options(&s.settings.get());
                 let ops = vector_render::build(&doc, &opts, vector_render::IDENTITY);
                 let bg = if s.settings.get().app_dark { vector_model::Rgba { r: 24, g: 24, b: 28, a: 255 } } else { vector_model::Rgba::WHITE };
-                match io::png_bytes(&doc, &opts, &ops, 4.0, bg) {
-                    Ok(bytes) => io::queue_save_png(s.files.clone(), "vector".into(), bytes),
-                    Err(e) => s.status.set(format!("PNG failed: {e}")),
-                }
+                io::queue_png_render(s.files.clone(), "vector".into(), &doc, &ops, 4.0, bg);
             })
         }),
     ];
