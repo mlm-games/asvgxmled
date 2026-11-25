@@ -184,6 +184,7 @@ impl Animation {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct VectorDoc {
+    pub name: Option<String>,
     pub width: f64,
     pub height: f64,
     pub viewport_width: f64,
@@ -198,6 +199,7 @@ pub struct VectorDoc {
 impl VectorDoc {
     pub fn empty() -> Self {
         Self {
+            name: None,
             width: 24.0,
             height: 24.0,
             viewport_width: 24.0,

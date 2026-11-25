@@ -128,6 +128,14 @@ pub fn apply(doc: &VectorDoc, time_ms: u64) -> VectorDoc {
                     }
                 }
             };
+            if out.name.as_deref() == Some(animation.target.as_str()) {
+                if animator.property == "alpha" {
+                    if let Some(n) = number_of(&value) {
+                        out.alpha = n as f32;
+                    }
+                }
+                continue;
+            }
             apply_to_node(&mut out.nodes, &animation.target, animator, &value);
         }
     }

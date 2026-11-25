@@ -1,4 +1,4 @@
-use vector_model::{Rgba, format, parse};
+use vector_model::{Node, Paint, Rgba, format, parse};
 
 const ICON: &str = r##"<vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="48dp" android:height="48dp"
@@ -66,6 +66,37 @@ fn parses_and_applies_animated_vector() {
     } else {
         panic!("expected group");
     }
+}
+
+#[test]
+fn official_gradient_form_parses() {
+    let xml = r##"<vector xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:aapt="http://schemas.android.com/aapt"
+        android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+        <path android:pathData="M0,0H24V24H0Z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:startColor="#FF000000" android:centerColor="#FF00FF00"
+                    android:endColor="#FFFFFFFF" android:startX="0" android:startY="0"
+                    android:endX="24" android:endY="24" android:type="linear" />
+            </aapt:attr>
+        </path>
+        <path android:pathData="M0,0H10V10H0Z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="radial" android:centerX="5" android:centerY="5"
+                    android:gradientRadius="5" android:endColor="#FFFF0000" />
+            </aapt:attr>
+        </path>
+    </vector>"##;
+    let result = parse(xml);
+    assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+    let doc = result.doc.unwrap();
+    let vector_model::Node::Path(p) = &doc.nodes[0] else { panic!() };
+    let Some(vector_model::Paint::Linear(g)) = &p.fill else { panic!("linear") };
+    assert_eq!(g.stops.len(), 3);
+    assert_eq!(g.stops[1].offset, 0.5);
+    let vector_model::Node::Path(p2) = &doc.nodes[1] else { panic!() };
+    let Some(vector_model::Paint::Radial(g2)) = &p2.fill else { panic!("radial") };
+    assert_eq!(g2.radius, 5.0);
 }
 
 #[test]

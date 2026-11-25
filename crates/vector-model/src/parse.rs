@@ -161,9 +161,25 @@ impl<'a> Builder<'a> {
             stops.push(GradientStop { offset: offset as f32, color });
         }
         if stops.is_empty() {
+            let named = [
+                ("startColor", 0.0),
+                ("centerColor", 0.5),
+                ("endColor", 1.0),
+            ];
+            for (name, offset) in named {
+                if let Some(raw) = el.attr(name) {
+                    match ColorSpec::parse(raw) {
+                        Some(c) => stops.push(GradientStop { offset, color: c }),
+                        None => self.warn(el.start, format!("invalid {name} '{raw}'")),
+                    }
+                }
+            }
+        }
+        if stops.is_empty() {
             self.warn(el.start, "gradient has no valid stops");
             return None;
         }
+        stops.sort_by(|a, b| a.offset.partial_cmp(&b.offset).unwrap_or(std::cmp::Ordering::Equal));
         match kind {
             "linear" => Some(Paint::Linear(LinearGradient {
                 start: (self.number(el, "startX", 0.0), self.number(el, "startY", 0.0)),
@@ -171,12 +187,16 @@ impl<'a> Builder<'a> {
                 units,
                 stops,
             })),
-            "radial" => Some(Paint::Radial(RadialGradient {
+            "radial" => {
+                let fallback = self.number(el, "radius", 0.0);
+                let radius = self.number(el, "gradientRadius", fallback);
+                Some(Paint::Radial(RadialGradient {
                 center: (self.number(el, "centerX", 0.0), self.number(el, "centerY", 0.0)),
-                radius: self.number(el, "radius", 0.0),
+                radius,
                 units,
                 stops,
-            })),
+            }))
+            },
             "sweep" => {
                 self.warn(el.start, "sweep gradients are approximated; Android GPU sweep differs");
                 Some(Paint::Sweep(SweepGradient {
@@ -535,6 +555,7 @@ pub fn parse(src: &str) -> ParseResult {
     let viewport_width = b.number(vector, "viewportWidth", width);
     let viewport_height = b.number(vector, "viewportHeight", height);
     let doc = VectorDoc {
+        name: vector.attr("name").map(str::to_owned),
         width,
         height,
         viewport_width,

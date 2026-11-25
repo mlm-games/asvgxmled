@@ -143,6 +143,26 @@ fn set_repeat_and_value_to_only_parse() {
 }
 
 #[test]
+fn root_vector_alpha_is_animatable() {
+    let xml = r##"<animated-vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt">
+        <aapt:attr name="android:drawable">
+            <vector android:name="root" android:width="24dp" android:height="24dp"
+                android:viewportWidth="24" android:viewportHeight="24" android:alpha="1" />
+        </aapt:attr>
+        <target android:name="root"><aapt:attr name="android:animation">
+            <objectAnimator android:propertyName="alpha" android:valueFrom="1" android:valueTo="0"
+                android:duration="1000" />
+        </aapt:attr></target>
+    </animated-vector>"##;
+    let result = parse(xml);
+    assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+    let doc = result.doc.unwrap();
+    assert_eq!(doc.name.as_deref(), Some("root"));
+    let mid = apply_animations(&doc, 500);
+    assert!((mid.alpha - 0.5).abs() < 1e-6, "alpha = {}", mid.alpha);
+}
+
+#[test]
 fn invalid_path_animator_value_warns() {
     let xml = r##"<animated-vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt">
         <aapt:attr name="android:drawable">

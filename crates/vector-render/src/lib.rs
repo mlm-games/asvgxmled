@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use kurbo::{BezPath, Shape};
+use kurbo::{BezPath, ParamCurve, PathSeg, Shape};
 use lyon_path::Path as LyonPath;
 use lyon_path::math::{Point as LyonPoint, point};
 use lyon_tessellation::{
@@ -198,6 +198,64 @@ fn vertex_paint(paint: &Paint, path: &BezPath, opts: &RenderOptions, alpha: f32)
     }
 }
 
+fn segment_length(seg: &PathSeg) -> f64 {
+    let mut single = BezPath::new();
+    single.move_to(seg.start());
+    single.push(seg.as_path_el());
+    single.perimeter(0.05)
+}
+
+fn append_range(path: &BezPath, out: &mut BezPath, from: f64, to: f64) {
+    if to - from < 1e-6 {
+        return;
+    }
+    let total: f64 = path.segments().map(|s| segment_length(&s)).sum();
+    if total < 1e-6 {
+        return;
+    }
+    let mut cursor = 0.0;
+    let mut started = false;
+    for seg in path.segments() {
+        let len = segment_length(&seg);
+        if len < 1e-6 {
+            continue;
+        }
+        let a = cursor / total;
+        let b = (cursor + len) / total;
+        cursor += len;
+        if b <= from || a >= to {
+            continue;
+        }
+        let lo = ((from - a) / (b - a)).clamp(0.0, 1.0);
+        let hi = ((to - a) / (b - a)).clamp(0.0, 1.0);
+        if hi - lo < 1e-6 {
+            continue;
+        }
+        let sub = seg.subsegment(lo..hi);
+        if !started {
+            out.move_to(sub.start());
+            started = true;
+        }
+        out.push(sub.as_path_el());
+    }
+}
+
+fn trimmed(path: &BezPath, start: f64, end: f64, offset: f64) -> BezPath {
+    if start <= 0.0 && end >= 1.0 && offset == 0.0 {
+        return path.clone();
+    }
+    let s = (start + offset).rem_euclid(1.0);
+    let e = (end + offset).rem_euclid(1.0);
+    let mut out = BezPath::new();
+    if s < e {
+        append_range(path, &mut out, s, e);
+    } else {
+        append_range(path, &mut out, s, 1.0);
+        append_range(path, &mut out, 0.0, e);
+    }
+    out
+}
+
 fn bez_to_lyon(path: &BezPath) -> LyonPath {
     let mut b = LyonPath::builder();
     let mut started = false;
@@ -372,7 +430,8 @@ fn emit_nodes(nodes: &[Node], opts: &RenderOptions, viewport: Transform, parent:
                 }
             }
             Node::Path(p) => {
-                let lyon = bez_to_lyon(&p.path);
+                let path = trimmed(&p.path, p.trim_start, p.trim_end, p.trim_offset);
+                let lyon = bez_to_lyon(&path);
                 let alpha = alpha * p.alpha;
                 if let Some(fill) = &p.fill {
                     let vp = vertex_paint(fill, &p.path, opts, alpha * p.fill_alpha);
@@ -413,6 +472,21 @@ pub fn with_outer(ops: &[RenderOp], outer: Transform) -> Vec<RenderOp> {
             RenderOp::PopClip => RenderOp::PopClip,
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn trim_path_keeps_only_selected_fraction() {
+        let mut path = BezPath::new();
+        path.move_to((0.0, 0.0));
+        path.line_to((100.0, 0.0));
+        let full = path.perimeter(0.01);
+        let half = trimmed(&path, 0.0, 0.5, 0.0).perimeter(0.01);
+        assert!((half - full * 0.5).abs() < 1.0, "full={full} half={half}");
+    }
 }
 
 pub fn paint(ops: &[RenderOp], scope: &mut repose_canvas::DrawScope) {
