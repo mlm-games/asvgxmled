@@ -61,22 +61,25 @@ fn path_data(path: &BezPath) -> String {
     out
 }
 
-fn animator_progress(a: &Animator, time_ms: u64) -> f64 {
-    let t = time_ms.saturating_sub(a.start_offset_ms);
+fn animator_progress(a: &Animator, time_ms: u64) -> Option<f64> {
+    if time_ms < a.start_offset_ms {
+        return None;
+    }
+    let t = time_ms - a.start_offset_ms;
     if t >= a.duration_ms.max(1) && a.repeat_count == 0 {
-        return 1.0;
+        return Some(1.0);
     }
     let period = a.duration_ms.max(1);
     let cycles = if a.repeat_count < 0 { usize::MAX } else { (a.repeat_count.max(0) + 1) as usize };
     let cycle = (t / period) as usize;
     if cycle >= cycles {
-        return 1.0;
+        return Some(1.0);
     }
     let mut p = (t % period) as f64 / period as f64;
     if a.repeat_mode == RepeatMode::Reverse && cycle % 2 == 1 {
         p = 1.0 - p;
     }
-    p.clamp(0.0, 1.0)
+    Some(p.clamp(0.0, 1.0))
 }
 
 fn color_of(value: &AnimValue) -> Option<ColorSpec> {
@@ -90,11 +93,7 @@ fn color_of(value: &AnimValue) -> Option<ColorSpec> {
 fn number_of(value: &AnimValue) -> Option<f64> {
     match value {
         AnimValue::Number(n) => Some(*n),
-        AnimValue::Color(c) => match c {
-            ColorSpec::Literal(v) => Some(v.a as f64 / 255.0),
-            ColorSpec::Reference(_) => None,
-        },
-        AnimValue::Path(_, _) => None,
+        _ => None,
     }
 }
 
@@ -105,7 +104,7 @@ pub fn apply(doc: &VectorDoc, time_ms: u64) -> VectorDoc {
     let mut out = doc.clone();
     for animation in &doc.animations {
         for animator in &animation.animators {
-            let p = animator_progress(animator, time_ms);
+            let Some(p) = animator_progress(animator, time_ms) else { continue; };
             let value = match (&animator.from, &animator.to) {
                 (AnimValue::Number(a), AnimValue::Number(b)) => AnimValue::Number(lerp(*a, *b, p)),
                 (AnimValue::Path(_, a), AnimValue::Path(_, b)) => {
@@ -185,7 +184,15 @@ fn apply_to_node(nodes: &mut [Node], target: &str, animator: &Animator, value: &
                     return true;
                 }
             }
-            Node::Clip(_) => {}
+            Node::Clip(c) => {
+                if c.name.as_deref() == Some(target) {
+                    if let AnimValue::Path(data, path) = value {
+                        c.path_data = data.clone();
+                        c.path = path.clone();
+                    }
+                    return true;
+                }
+            }
         }
     }
     false

@@ -69,6 +69,23 @@ fn parses_and_applies_animated_vector() {
 }
 
 #[test]
+fn svg_export_honors_root_alpha_and_mirror_once() {
+    let xml = r##"<vector xmlns:android="http://schemas.android.com/apk/res/android"
+        android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"
+        android:alpha="0.5" android:autoMirrored="true">
+        <group android:name="outer">
+            <group android:name="inner">
+                <path android:pathData="M0,0H10V10H0Z" android:fillColor="#FFFFFFFF" />
+            </group>
+        </group>
+    </vector>"##;
+    let doc = parse(xml).doc.expect("parses");
+    let svg = format::to_svg(&doc, Rgba::BLACK);
+    assert!(svg.contains("opacity=\"0.5\""), "{svg}");
+    assert_eq!(svg.matches("scale(-1 1)").count(), 1, "{svg}");
+}
+
+#[test]
 fn tint_preserves_source_alpha() {
     let xml = r##"<vector xmlns:android="http://schemas.android.com/apk/res/android"
         android:width="24dp" android:height="24dp"

@@ -176,7 +176,7 @@ impl Animation {
     pub fn duration_ms(&self) -> u64 {
         self.animators
             .iter()
-            .map(|a| a.start_offset_ms + a.duration_ms.saturating_mul(if a.repeat_count < 0 { 1 } else { (a.repeat_count.max(0) + 1) as u64 }))
+            .map(|a| a.start_offset_ms + a.duration_ms)
             .max()
             .unwrap_or(0)
     }

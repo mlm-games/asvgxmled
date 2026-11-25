@@ -9,7 +9,7 @@ use image::ImageFormat;
 use repose_core::{BlendMode, ClipOp, Color, PaintDesc, Scene, SceneNode};
 use repose_render_wgpu::offscreen::OffscreenRenderer;
 use vector_model::{Rgba, VectorDoc};
-use vector_render::{RenderOptions, RenderOp};
+use vector_render::RenderOp;
 
 pub enum FileEvent {
     Loaded { name: String, text: String },

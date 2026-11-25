@@ -72,9 +72,14 @@ impl PathParser<'_> {
                                 self.last_ctrl = None;
                             }
                             b'T' => {
-                                let ctrl = self.last_ctrl.map(|c| self.current + (self.current - c)).unwrap_or(self.current);
+                                let ctrl = if matches!(self.last_cmd, Some(b'Q') | Some(b'T')) {
+                                    self.last_ctrl.map(|c| self.current + (self.current - c)).unwrap_or(self.current)
+                                } else {
+                                    self.current
+                                };
                                 self.path.quad_to(ctrl, to);
                                 self.last_ctrl = Some(ctrl);
+                                self.last_cmd = Some(upper);
                             }
                             _ => unreachable!(),
                         }

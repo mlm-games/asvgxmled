@@ -311,50 +311,98 @@ fn collect_targets<'a>(el: &'a Element, out: &mut Vec<(&'a Element, String)>) {
     }
 }
 
-fn collect_animators<'a>(el: &'a Element, out: &mut Vec<&'a Element>) {
-    if matches!(el.name.as_str(), "objectAnimator" | "valueAnimator") {
-        out.push(el);
-    }
-    for child in &el.children {
-        collect_animators(child, out);
+fn repeat_count(raw: Option<&str>) -> i32 {
+    match raw {
+        Some("infinite") => -1,
+        Some(raw) => parse_number(raw).unwrap_or(0.0) as i32,
+        None => 0,
     }
 }
 
-fn anim_value(raw: &str, value_type: Option<&str>) -> AnimValue {
+fn repeat_mode(raw: Option<&str>) -> RepeatMode {
+    if raw == Some("reverse") { RepeatMode::Reverse } else { RepeatMode::Restart }
+}
+
+fn collect_animators<'a>(
+    el: &'a Element,
+    out: &mut Vec<(&'a Element, i32, RepeatMode)>,
+    inherited: (i32, RepeatMode),
+) {
+    if matches!(el.name.as_str(), "objectAnimator" | "valueAnimator") {
+        out.push((el, inherited.0, inherited.1));
+    }
+    let next = if el.name == "set" {
+        (
+            repeat_count(el.attr("repeatCount")),
+            repeat_mode(el.attr("repeatMode")),
+        )
+    } else {
+        inherited
+    };
+    for child in &el.children {
+        collect_animators(child, out, next);
+    }
+}
+
+fn anim_value(raw: &str, value_type: Option<&str>, diagnostics: &mut Vec<Diagnostic>, offset: usize) -> AnimValue {
     if value_type == Some("pathType") || (value_type.is_none() && raw.contains('M')) {
-        if let Ok(path) = parse_path_data(raw) {
-            return AnimValue::Path(raw.to_owned(), path);
+        match parse_path_data(raw) {
+            Ok(path) => return AnimValue::Path(raw.to_owned(), path),
+            Err(e) => diagnostics.push(Diagnostic {
+                severity: Severity::Warning,
+                message: format!("invalid pathType animator value: {}", e.message),
+                offset,
+            }),
         }
     }
     if value_type == Some("colorType") {
         if let Some(c) = ColorSpec::parse(raw) {
             return AnimValue::Color(c);
         }
+        diagnostics.push(Diagnostic {
+            severity: Severity::Warning,
+            message: format!("invalid colorType animator value '{raw}'"),
+            offset,
+        });
     }
     AnimValue::Number(parse_number(raw).unwrap_or(0.0))
 }
 
-fn parse_animations(root: &Element) -> Vec<Animation> {
+fn parse_animations(root: &Element, diagnostics: &mut Vec<Diagnostic>) -> Vec<Animation> {
     let mut targets = Vec::new();
     collect_targets(root, &mut targets);
     targets
         .into_iter()
         .filter_map(|(el, name)| {
             let mut animators = Vec::new();
-            collect_animators(el, &mut animators);
-            let parsed: Vec<Animator> = animators.iter().filter_map(|a| {
+            collect_animators(el, &mut animators, (0, RepeatMode::Restart));
+            let parsed: Vec<Animator> = animators.iter().filter_map(|(a, set_repeat, set_mode)| {
                 let property = a.attr("propertyName")?.to_owned();
                 let kind = a.attr("valueType");
-                let from = a.attr("valueFrom").map(|v| anim_value(v, kind))?;
-                let to = a.attr("valueTo").map(|v| anim_value(v, kind))?;
+                let from = a.attr("valueFrom").map(|v| anim_value(v, kind, diagnostics, a.start));
+                let to = a.attr("valueTo").map(|v| anim_value(v, kind, diagnostics, a.start));
+                let (from, to) = match (from, to) {
+                    (Some(f), Some(t)) => (f, t),
+                    (Some(f), None) => (f.clone(), f),
+                    (None, Some(t)) => (t.clone(), t),
+                    (None, None) => return None,
+                };
                 Some(Animator {
                     property,
                     from,
                     to,
                     duration_ms: a.attr("duration").and_then(parse_number).unwrap_or(300.0) as u64,
                     start_offset_ms: a.attr("startOffset").and_then(parse_number).unwrap_or(0.0) as u64,
-                    repeat_count: a.attr("repeatCount").and_then(parse_number).unwrap_or(0.0) as i32,
-                    repeat_mode: if a.attr("repeatMode") == Some("reverse") { RepeatMode::Reverse } else { RepeatMode::Restart },
+                    repeat_count: if a.attr("repeatCount").is_some() {
+                        repeat_count(a.attr("repeatCount"))
+                    } else {
+                        *set_repeat
+                    },
+                    repeat_mode: if a.attr("repeatMode").is_some() {
+                        repeat_mode(a.attr("repeatMode"))
+                    } else {
+                        *set_mode
+                    },
                 })
             }).collect();
             if parsed.is_empty() { None } else { Some(Animation { target: name, animators: parsed }) }
@@ -406,7 +454,9 @@ fn parse_tree(src: &str, diagnostics: &mut Vec<Diagnostic>) -> Option<Element> {
                     end: start,
                 };
                 if is_empty {
-                    attach(element, &mut stack, &mut root);
+                    let mut element = element;
+                    element.end = reader.buffer_position() as usize;
+                    attach(element, &mut stack, &mut root, diagnostics);
                 } else {
                     stack.push(element);
                 }
@@ -422,7 +472,7 @@ fn parse_tree(src: &str, diagnostics: &mut Vec<Diagnostic>) -> Option<Element> {
                         });
                     }
                     el.end = reader.buffer_position() as usize;
-                    attach(el, &mut stack, &mut root);
+                    attach(el, &mut stack, &mut root, diagnostics);
                 } else {
                     diagnostics.push(Diagnostic {
                         severity: Severity::Error,
@@ -447,12 +497,18 @@ fn parse_tree(src: &str, diagnostics: &mut Vec<Diagnostic>) -> Option<Element> {
     root
 }
 
-fn attach(mut el: Element, stack: &mut Vec<Element>, root: &mut Option<Element>) {
+fn attach(mut el: Element, stack: &mut Vec<Element>, root: &mut Option<Element>, diagnostics: &mut Vec<Diagnostic>) {
     el.end = el.end.max(el.start);
     if let Some(parent) = stack.last_mut() {
         parent.children.push(el);
     } else if root.is_none() {
         *root = Some(el);
+    } else {
+        diagnostics.push(Diagnostic {
+            severity: Severity::Error,
+            message: format!("multiple root elements: <{}>", el.name),
+            offset: el.start,
+        });
     }
 }
 
@@ -487,7 +543,7 @@ pub fn parse(src: &str) -> ParseResult {
         tint: b.color(vector, "tint"),
         auto_mirrored: b.boolean(vector, "autoMirrored", false),
         nodes: vector.children.iter().filter_map(|c| b.node(c)).collect(),
-        animations: if root.name == "animated-vector" { parse_animations(&root) } else { Vec::new() },
+        animations: if root.name == "animated-vector" { parse_animations(&root, &mut b.diagnostics) } else { Vec::new() },
     };
     let _ = b.src;
     ParseResult { doc: Some(doc), diagnostics: b.diagnostics }

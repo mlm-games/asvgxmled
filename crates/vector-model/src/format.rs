@@ -280,8 +280,14 @@ pub fn to_svg(doc: &VectorDoc, theme: Rgba) -> String {
     out.push_str("<defs>");
     let grads = gradient_defs(doc, &doc.tint, theme, &mut out);
     out.push_str("</defs>");
+    if doc.auto_mirrored {
+        out.push_str(&format!("<g transform=\"translate({} 0) scale(-1 1)\">", doc.viewport_width));
+    }
     let mut gi = 0;
-    emit_nodes(&doc.nodes, doc, theme, &mut gi, &grads, &mut out, 1.0);
+    emit_nodes(&doc.nodes, doc, theme, &mut gi, &grads, &mut out, doc.alpha);
+    if doc.auto_mirrored {
+        out.push_str("</g>");
+    }
     out.push_str("</svg>");
     out
 }
@@ -300,9 +306,6 @@ fn emit_nodes(nodes: &[Node], doc: &VectorDoc, theme: Rgba, gi: &mut usize, grad
                     -g.pivot_x,
                     -g.pivot_y
                 );
-                if doc.auto_mirrored {
-                    t = format!("translate({} 0) scale(-1 1) {t}", doc.viewport_width);
-                }
                 out.push_str(&format!("<g transform=\"{t}\" opacity=\"{}\">", g.alpha * alpha));
                 emit_nodes(&g.children, doc, theme, gi, grads, out, g.alpha * alpha);
                 out.push_str("</g>");
